@@ -1,0 +1,2 @@
+# MJSEC-Ransomware
+ㅗ
